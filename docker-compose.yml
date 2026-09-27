@@ -1,0 +1,521 @@
+version: '3.9'
+
+# AI Company Platform — full local stack
+# Usage: docker compose up
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform
+      POSTGRES_DB: platform
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U platform']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - '9200:9200'
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -s http://localhost:9200/_cluster/health | grep -q "green\|yellow"']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports:
+      - '9092:9092'
+    healthcheck:
+      test: ['CMD-SHELL', 'kafka-topics --bootstrap-server localhost:9092 --list']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/data
+
+  # ── Common env fragment (YAML anchor) ───────────────────────────────────────
+  # Referenced by all services via x-common-env
+
+  # ── Platform Services ────────────────────────────────────────────────────────
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      PORT: '3000'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public_key
+      AUTH_SERVICE_URL: http://auth:3001
+      CONTACT_SERVICE_URL: http://contact:3002
+      MARKETING_SERVICE_URL: http://marketing:3003
+      CHATBOT_SERVICE_URL: http://chatbot:3004
+      AUTOMATION_SERVICE_URL: http://automation:3005
+      CALL_SERVICE_URL: http://call:3006
+      FEEDBACK_SERVICE_URL: http://feedback:3007
+      INTEGRATION_SERVICE_URL: http://integration:3008
+      BILLING_SERVICE_URL: http://billing:3009
+      NOTIFICATION_SERVICE_URL: http://notification:3010
+      REPORT_SERVICE_URL: http://reports:3011
+      ATTRIBUTION_SERVICE_URL: http://attribution:3012
+      EXPORT_SERVICE_URL: http://export:3013
+      CRM_SERVICE_URL: http://crm:3014
+      TASK_SERVICE_URL: http://tasks:3015
+      LIVE_CHAT_SERVICE_URL: http://live-chat:3016
+      TEAM_INBOX_SERVICE_URL: http://team-inbox:3017
+      COLLABORATION_SERVICE_URL: http://collaboration:3018
+      LEAD_SCORER_SERVICE_URL: http://lead-scorer:3019
+      PREDICTIVE_SERVICE_URL: http://predictive:3020
+      CONTENT_ASSISTANT_SERVICE_URL: http://content-assistant:3021
+      RESELLER_SERVICE_URL: http://reseller:3022
+      MARKETPLACE_SERVICE_URL: http://marketplace:3023
+      PORTAL_SERVICE_URL: http://portal:3024
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    ports:
+      - '3001:3001'
+    environment:
+      PORT: '3001'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private_key
+      JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public_key
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  contact:
+    build:
+      context: .
+      dockerfile: services/contact/Dockerfile
+    ports:
+      - '3002:3002'
+    environment:
+      PORT: '3002'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: platform-files
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+    depends_on:
+      postgres: { condition: service_healthy }
+      elasticsearch: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  marketing:
+    build:
+      context: .
+      dockerfile: services/marketing/Dockerfile
+    ports:
+      - '3003:3003'
+    environment:
+      PORT: '3003'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  chatbot:
+    build:
+      context: .
+      dockerfile: services/chatbot/Dockerfile
+    ports:
+      - '3004:3004'
+    environment:
+      PORT: '3004'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: platform-files
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  automation:
+    build:
+      context: .
+      dockerfile: services/automation/Dockerfile
+    ports:
+      - '3005:3005'
+    environment:
+      PORT: '3005'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  call:
+    build:
+      context: .
+      dockerfile: services/call/Dockerfile
+    ports:
+      - '3006:3006'
+    environment:
+      PORT: '3006'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: platform-recordings
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  feedback:
+    build:
+      context: .
+      dockerfile: services/feedback/Dockerfile
+    ports:
+      - '3007:3007'
+    environment:
+      PORT: '3007'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  integration:
+    build:
+      context: .
+      dockerfile: services/integration/Dockerfile
+    ports:
+      - '3008:3008'
+    environment:
+      PORT: '3008'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  billing:
+    build:
+      context: .
+      dockerfile: services/billing/Dockerfile
+    ports:
+      - '3009:3009'
+    environment:
+      PORT: '3009'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  notification:
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    ports:
+      - '3010:3010'
+    environment:
+      PORT: '3010'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  reports:
+    build:
+      context: .
+      dockerfile: services/reports/Dockerfile
+    ports:
+      - '3011:3011'
+    environment:
+      PORT: '3011'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  attribution:
+    build:
+      context: .
+      dockerfile: services/attribution/Dockerfile
+    ports:
+      - '3012:3012'
+    environment:
+      PORT: '3012'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  export:
+    build:
+      context: .
+      dockerfile: services/export/Dockerfile
+    ports:
+      - '3013:3013'
+    environment:
+      PORT: '3013'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: platform-exports
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  crm:
+    build:
+      context: .
+      dockerfile: services/crm/Dockerfile
+    ports:
+      - '3014:3014'
+    environment:
+      PORT: '3014'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  tasks:
+    build:
+      context: .
+      dockerfile: services/tasks/Dockerfile
+    ports:
+      - '3015:3015'
+    environment:
+      PORT: '3015'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  live-chat:
+    build:
+      context: .
+      dockerfile: services/live-chat/Dockerfile
+    ports:
+      - '3016:3016'
+    environment:
+      PORT: '3016'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  team-inbox:
+    build:
+      context: .
+      dockerfile: services/team-inbox/Dockerfile
+    ports:
+      - '3017:3017'
+    environment:
+      PORT: '3017'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  collaboration:
+    build:
+      context: .
+      dockerfile: services/collaboration/Dockerfile
+    ports:
+      - '3018:3018'
+    environment:
+      PORT: '3018'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  lead-scorer:
+    build:
+      context: .
+      dockerfile: services/lead-scorer/Dockerfile
+    ports:
+      - '3019:3019'
+    environment:
+      PORT: '3019'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  predictive:
+    build:
+      context: .
+      dockerfile: services/predictive/Dockerfile
+    ports:
+      - '3020:3020'
+    environment:
+      PORT: '3020'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  content-assistant:
+    build:
+      context: .
+      dockerfile: services/content-assistant/Dockerfile
+    ports:
+      - '3021:3021'
+    environment:
+      PORT: '3021'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  reseller:
+    build:
+      context: .
+      dockerfile: services/reseller/Dockerfile
+    ports:
+      - '3022:3022'
+    environment:
+      PORT: '3022'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  marketplace:
+    build:
+      context: .
+      dockerfile: services/marketplace/Dockerfile
+    ports:
+      - '3023:3023'
+    environment:
+      PORT: '3023'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  portal:
+    build:
+      context: .
+      dockerfile: services/portal/Dockerfile
+    ports:
+      - '3024:3024'
+    environment:
+      PORT: '3024'
+      DATABASE_URL: postgres://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+volumes:
+  postgres_data:
+  es_data:
+  minio_data:

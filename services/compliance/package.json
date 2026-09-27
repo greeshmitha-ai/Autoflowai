@@ -1,0 +1,31 @@
+{
+  "name": "@platform/compliance",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@platform/cache": "workspace:*",
+    "@platform/db": "workspace:*",
+    "@platform/events": "workspace:*",
+    "archiver": "^7.0.1",
+    "drizzle-orm": "^0.30.10",
+    "fastify": "^4.27.0",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.2",
+    "@types/node": "^20.14.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.11.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

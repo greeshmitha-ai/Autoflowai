@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "composite": false,
+    "paths": {
+      "@platform/cache": ["../../packages/cache/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "../../packages/cache/src/**/*"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

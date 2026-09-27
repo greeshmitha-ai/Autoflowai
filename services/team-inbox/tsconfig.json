@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "composite": false,
+    "paths": {
+      "@platform/db": ["../../packages/db/src/index.ts"],
+      "@platform/events": ["../../packages/events/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "../../packages/db/src/**/*",
+    "../../packages/events/src/**/*"
+  ],
+  "exclude": ["node_modules", "dist"]
+}
